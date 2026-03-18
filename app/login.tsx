@@ -59,7 +59,7 @@ export default function LoginScreen() {
     <View style={styles.root}>
       {/* Background Hero */}
       <Image
-        source={require('@/assets/images/vault-hero.png')}
+        source={{ uri: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=800&q=80' }}
         style={styles.heroImage}
         contentFit="cover"
         transition={300}
