@@ -23,12 +23,9 @@ import {
 } from '@/services/content.service';
 import { fetchSubjectsForEnrollment } from '@/services/enrollment.service';
 import {
-  generatePayHereHash,
-  buildPayHereCheckoutHtml,
+  openPayHereCheckout,
   updatePrintPaymentStatus,
-  PAYHERE_SANDBOX,
 } from '@/services/payhere.service';
-import { PayHereWebView } from '@/components/feature/PayHereWebView';
 import { useAlert } from '@/template';
 
 type Step = 'select' | 'review' | 'delivery' | 'confirm';
@@ -51,8 +48,6 @@ export default function PrintRequestScreen() {
   const [myRequests, setMyRequests] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [pendingRequestNumber, setPendingRequestNumber] = useState('');
-  const [checkoutHtml, setCheckoutHtml] = useState('');
-  const [showPayment, setShowPayment] = useState(false);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { showAlert } = useAlert();
@@ -124,8 +119,9 @@ export default function PrintRequestScreen() {
       });
 
       if (paymentMethod === 'bank_transfer') {
-        // Launch PayHere for online payment
+        setLoading(false);
         await launchPayHereForPrint(result.request_number, priceData.totalAmount);
+        return;
       } else {
         // COD — no online payment
         showAlert(
@@ -142,61 +138,33 @@ export default function PrintRequestScreen() {
 
   const launchPayHereForPrint = async (requestNumber: string, amount: number) => {
     if (!user || !profile) return;
-    try {
-      setPendingRequestNumber(requestNumber);
-      const nameParts = (profile.full_name || fullName || 'ReadBase User').split(' ');
-      const firstName = nameParts[0] || 'ReadBase';
-      const lastName = nameParts.slice(1).join(' ') || 'Student';
+    setPendingRequestNumber(requestNumber);
+    const nameParts = (profile.full_name || fullName || 'ReadBase User').split(' ');
 
-      const { hash, merchantId } = await generatePayHereHash(requestNumber, amount, 'LKR');
+    const result = await openPayHereCheckout({
+      orderId: requestNumber,
+      items: `Print Request — ${selectedSubject?.name || 'Study Notes'}`,
+      amount,
+      firstName: nameParts[0] || 'ReadBase',
+      lastName: nameParts.slice(1).join(' ') || 'Student',
+      email: user.email || '',
+      phone: phone.trim(),
+      address: address.trim(),
+      city: city.trim(),
+    });
 
-      const html = buildPayHereCheckoutHtml({
-        merchantId,
-        hash,
-        orderId: requestNumber,
-        items: `Print Request — ${selectedSubject?.name || 'Study Notes'}`,
-        amount: amount.toFixed(2),
-        currency: 'LKR',
-        firstName,
-        lastName,
-        email: user.email || '',
-        phone: phone.trim(),
-        address: address.trim(),
-        city: city.trim(),
-        country: 'Sri Lanka',
-        sandbox: PAYHERE_SANDBOX,
-      });
-
-      setCheckoutHtml(html);
-      setShowPayment(true);
-    } catch (err: any) {
-      showAlert('Payment Error', err?.message || 'Could not initiate PayHere payment.');
+    if (result.type === 'success') {
+      try { await updatePrintPaymentStatus(requestNumber, result.paymentId, 'paid'); } catch (_) {}
+      showAlert(
+        'Payment Successful!',
+        `Request #${requestNumber} confirmed. Your notes will be printed and shipped shortly.`,
+        [{ text: 'Great!', onPress: () => router.back() }]
+      );
+    } else if (result.type === 'cancel') {
+      showAlert('Payment Cancelled', `Request #${requestNumber} saved as pending. You can pay later or choose COD.`);
+    } else {
+      showAlert('Payment Error', result.message || 'An error occurred. Request saved.');
     }
-  };
-
-  const handlePaymentSuccess = async (paymentId: string) => {
-    setShowPayment(false);
-    try {
-      await updatePrintPaymentStatus(pendingRequestNumber, paymentId, 'paid');
-    } catch (_) {}
-    showAlert(
-      'Payment Successful!',
-      `Request #${pendingRequestNumber} confirmed. Your notes will be printed and shipped shortly.`,
-      [{ text: 'Great!', onPress: () => router.back() }]
-    );
-  };
-
-  const handlePaymentCancel = () => {
-    setShowPayment(false);
-    showAlert(
-      'Payment Cancelled',
-      `Your request #${pendingRequestNumber} is saved as pending. You can pay later or choose COD.`
-    );
-  };
-
-  const handlePaymentError = (msg: string) => {
-    setShowPayment(false);
-    showAlert('Payment Error', msg || 'An error occurred. Request saved — please try again.');
   };
 
   const STATUS_COLORS: Record<string, string> = {
@@ -432,15 +400,7 @@ export default function PrintRequestScreen() {
         </ScrollView>
       )}
 
-      {/* PayHere WebView Modal */}
-      <PayHereWebView
-        visible={showPayment}
-        checkoutHtml={checkoutHtml}
-        onSuccess={handlePaymentSuccess}
-        onCancel={handlePaymentCancel}
-        onError={handlePaymentError}
-        onDismiss={() => setShowPayment(false)}
-      />
+
     </View>
   );
 }

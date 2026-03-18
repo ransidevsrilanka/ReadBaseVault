@@ -50,6 +50,7 @@ export default function TabLayout() {
         },
       }}
     >
+      {/* 1. Home */}
       <Tabs.Screen
         name="index"
         options={{
@@ -59,15 +60,8 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="subjects"
-        options={{
-          title: 'Subjects',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="library-books" size={size} color={color} />
-          ),
-        }}
-      />
+
+      {/* 2. AI Tutor */}
       <Tabs.Screen
         name="ai-chat"
         options={{
@@ -77,6 +71,21 @@ export default function TabLayout() {
           ),
         }}
       />
+
+      {/* 3. Inbox */}
+      <Tabs.Screen
+        name="inbox"
+        options={{
+          title: 'Inbox',
+          tabBarIcon: ({ color, size, focused }) => (
+            <View>
+              <MaterialIcons name="notifications" size={size} color={color} />
+            </View>
+          ),
+        }}
+      />
+
+      {/* 4. Profile */}
       <Tabs.Screen
         name="profile"
         options={{
@@ -84,6 +93,14 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="person" size={size} color={color} />
           ),
+        }}
+      />
+
+      {/* Hidden — subjects accessible via Home dashboard */}
+      <Tabs.Screen
+        name="subjects"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

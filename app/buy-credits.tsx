@@ -24,16 +24,12 @@ import {
   CREDIT_STEP,
   snapToGrid,
   AICreditPackage,
-  generatePayHereHash,
-  buildPayHereCheckoutHtml,
+  openPayHereCheckout,
   creditAICreditsAfterPayment,
-  PAYHERE_SANDBOX,
 } from '@/services/payhere.service';
 import { fetchAICredits } from '@/services/enrollment.service';
-import { PayHereWebView } from '@/components/feature/PayHereWebView';
 import { useAlert } from '@/template';
 
-// Quick-select preset amounts
 const PRESETS = [100, 500, 1000, 2500, 5000, 10000];
 
 export default function BuyCreditsScreen() {
@@ -43,15 +39,12 @@ export default function BuyCreditsScreen() {
   const [currentCredits, setCurrentCredits] = useState<any>(null);
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
-  const [checkoutHtml, setCheckoutHtml] = useState('');
-  const [showPayment, setShowPayment] = useState(false);
-  const [currentOrderId, setCurrentOrderId] = useState('');
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { showAlert } = useAlert();
 
   const noAIAccess = enrollment?.tier === 'starter';
-  const lkrAmount = creditAmount; // 1 credit = 1 LKR
+  const lkrAmount = creditAmount;
 
   useEffect(() => {
     if (!user || !enrollment) return;
@@ -65,18 +58,13 @@ export default function BuyCreditsScreen() {
   }, []);
 
   const handleSlider = (val: number) => {
-    // Slider value is 0–1, map to CREDIT_MIN–CREDIT_MAX in CREDIT_STEP steps
     const steps = Math.round(val * ((CREDIT_MAX - CREDIT_MIN) / CREDIT_STEP));
     applyAmount(CREDIT_MIN + steps * CREDIT_STEP);
   };
 
   const handleInputBlur = () => {
     const parsed = parseInt(inputText.replace(/[^0-9]/g, ''), 10);
-    if (isNaN(parsed)) {
-      applyAmount(CREDIT_MIN);
-    } else {
-      applyAmount(parsed);
-    }
+    applyAmount(isNaN(parsed) ? CREDIT_MIN : parsed);
   };
 
   const sliderValue = (creditAmount - CREDIT_MIN) / (CREDIT_MAX - CREDIT_MIN);
@@ -93,72 +81,42 @@ export default function BuyCreditsScreen() {
     }
 
     setLoading(true);
-    try {
-      const orderId = `AIC-${Date.now()}`;
-      setCurrentOrderId(orderId);
+    const orderId = `AIC-${Date.now()}`;
+    const nameParts = (profile.full_name || 'ReadBase User').split(' ');
 
-      const nameParts = (profile.full_name || 'ReadBase User').split(' ');
-      const firstName = nameParts[0] || 'ReadBase';
-      const lastName = nameParts.slice(1).join(' ') || 'Student';
-
-      const { hash, merchantId } = await generatePayHereHash(orderId, lkrAmount, 'LKR');
-
-      const html = buildPayHereCheckoutHtml({
-        merchantId,
-        hash,
-        orderId,
-        items: `ReadBase AI Credits — ${creditAmount.toLocaleString()} credits`,
-        amount: lkrAmount.toFixed(2),
-        currency: 'LKR',
-        firstName,
-        lastName,
-        email: user.email || '',
-        phone: phone.trim(),
-        address: 'ReadBase Platform',
-        city: 'Colombo',
-        country: 'Sri Lanka',
-        sandbox: PAYHERE_SANDBOX,
-      });
-
-      setCheckoutHtml(html);
-      setShowPayment(true);
-    } catch (err: any) {
-      showAlert('Payment Error', err?.message || 'Could not initiate payment. Please check your credentials and try again.');
-    }
+    const result = await openPayHereCheckout({
+      orderId,
+      items: `ReadBase AI Credits — ${creditAmount.toLocaleString()} credits`,
+      amount: lkrAmount,
+      firstName: nameParts[0] || 'ReadBase',
+      lastName: nameParts.slice(1).join(' ') || 'Student',
+      email: user.email || '',
+      phone: phone.trim(),
+      address: 'ReadBase Platform',
+      city: 'Colombo',
+    });
     setLoading(false);
-  };
 
-  const handlePaymentSuccess = async (paymentId: string) => {
-    setShowPayment(false);
-    if (!user || !enrollment) return;
-
-    const pkg: AICreditPackage = {
-      id: currentOrderId,
-      label: `${creditAmount.toLocaleString()} Credits`,
-      credits: creditAmount,
-      price: lkrAmount,
-    };
-
-    try {
-      await creditAICreditsAfterPayment(user.id, enrollment.id, pkg, paymentId);
+    if (result.type === 'success') {
+      const pkg: AICreditPackage = {
+        id: orderId,
+        label: `${creditAmount.toLocaleString()} Credits`,
+        credits: creditAmount,
+        price: lkrAmount,
+      };
+      try {
+        await creditAICreditsAfterPayment(user.id, enrollment.id, pkg, result.paymentId);
+      } catch (_) {}
       showAlert(
         'Credits Added!',
         `${creditAmount.toLocaleString()} AI credits have been added to your account.`,
         [{ text: 'Great!', onPress: () => router.back() }]
       );
-    } catch {
-      showAlert('Note', 'Payment received. Credits may take a few minutes to reflect in your account.');
+    } else if (result.type === 'cancel') {
+      showAlert('Payment Cancelled', 'No charges were made.');
+    } else {
+      showAlert('Payment Error', result.message || 'Could not complete payment. Please try again.');
     }
-  };
-
-  const handlePaymentCancel = () => {
-    setShowPayment(false);
-    showAlert('Payment Cancelled', 'No charges were made.');
-  };
-
-  const handlePaymentError = (msg: string) => {
-    setShowPayment(false);
-    showAlert('Payment Error', msg || 'An error occurred. Please try again.');
   };
 
   const creditUsed = currentCredits?.credits_used || 0;
@@ -172,7 +130,7 @@ export default function BuyCreditsScreen() {
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
           <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
         </Pressable>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Buy AI Credits</Text>
           <Text style={styles.headerSub}>1 credit = LKR 1.00</Text>
         </View>
@@ -206,11 +164,7 @@ export default function BuyCreditsScreen() {
               </Text>
               {creditLimit > 0 ? (
                 <View style={styles.creditTrack}>
-                  <View
-                    style={[styles.creditFill, {
-                      width: `${Math.min(100, (creditRemaining / creditLimit) * 100)}%` as any,
-                    }]}
-                  />
+                  <View style={[styles.creditFill, { width: `${Math.min(100, (creditRemaining / creditLimit) * 100)}%` as any }]} />
                 </View>
               ) : null}
             </GlassCard>
@@ -220,7 +174,6 @@ export default function BuyCreditsScreen() {
           <GlassCard style={styles.pickerCard}>
             <Text style={styles.sectionTitle}>Choose Amount</Text>
 
-            {/* Manual input */}
             <View style={styles.inputRow}>
               <View style={styles.amountInputWrap}>
                 <Text style={styles.amountPrefix}>LKR</Text>
@@ -240,7 +193,6 @@ export default function BuyCreditsScreen() {
               </View>
             </View>
 
-            {/* Slider */}
             <View style={styles.sliderWrap}>
               <Slider
                 value={sliderValue}
@@ -259,7 +211,6 @@ export default function BuyCreditsScreen() {
               </View>
             </View>
 
-            {/* Quick Presets */}
             <View style={styles.presetGrid}>
               {PRESETS.map((p) => (
                 <Pressable
@@ -314,7 +265,7 @@ export default function BuyCreditsScreen() {
           </GlassCard>
 
           <VaultButton
-            label={`Pay LKR ${lkrAmount.toLocaleString()} via PayHere`}
+            label={loading ? 'Opening PayHere...' : `Pay LKR ${lkrAmount.toLocaleString()} via PayHere`}
             onPress={handlePurchase}
             loading={loading}
             fullWidth
@@ -323,21 +274,12 @@ export default function BuyCreditsScreen() {
 
           <View style={styles.payhereBadge}>
             <MaterialIcons name="lock" size={12} color={Colors.success} />
-            <Text style={styles.payhereText}>Secured by PayHere · 256-bit SSL · LKR only</Text>
+            <Text style={styles.payhereText}>Opens PayHere in secure in-app browser · LKR only</Text>
           </View>
 
           <View style={{ height: 32 }} />
         </ScrollView>
       )}
-
-      <PayHereWebView
-        visible={showPayment}
-        checkoutHtml={checkoutHtml}
-        onSuccess={handlePaymentSuccess}
-        onCancel={handlePaymentCancel}
-        onError={handlePaymentError}
-        onDismiss={() => setShowPayment(false)}
-      />
     </View>
   );
 }
@@ -354,141 +296,61 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.glass, borderWidth: 1, borderColor: Colors.glassBorder,
     alignItems: 'center', justifyContent: 'center',
   },
-  headerTitle: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 18, color: Colors.textPrimary, letterSpacing: -0.3,
-  },
-  headerSub: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 11, color: Colors.textMuted, marginTop: 1,
-  },
+  headerTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: Colors.textPrimary, letterSpacing: -0.3 },
+  headerSub: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: Colors.textMuted, marginTop: 1 },
   aiIcon: {
-    marginLeft: 'auto',
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.goldGlow,
-    borderWidth: 1, borderColor: Colors.gold + '33',
+    backgroundColor: Colors.goldGlow, borderWidth: 1, borderColor: Colors.gold + '33',
     alignItems: 'center', justifyContent: 'center',
   },
   scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24, gap: 16 },
   noAccessWrap: { flex: 1, padding: 20, justifyContent: 'center' },
   noAccessCard: { alignItems: 'center', gap: 12, paddingVertical: 36 },
-  noAccessTitle: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 17, color: Colors.textPrimary, letterSpacing: -0.2,
-  },
-  noAccessText: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 13, color: Colors.textMuted, textAlign: 'center', lineHeight: 20, paddingHorizontal: 12,
-  },
-  // Balance card
+  noAccessTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 17, color: Colors.textPrimary, letterSpacing: -0.2 },
+  noAccessText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: Colors.textMuted, textAlign: 'center', lineHeight: 20, paddingHorizontal: 12 },
   balanceCard: { gap: 8, padding: 16 },
   balanceRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   balanceLabel: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: Colors.textMuted },
-  balanceAmount: {
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 30, color: Colors.textPrimary, letterSpacing: -1,
-  },
-  balanceSuffix: {
-    fontFamily: 'PlusJakartaSans_400Regular', fontSize: 15, color: Colors.textMuted,
-  },
-  creditTrack: {
-    height: 4, backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.full, overflow: 'hidden', marginTop: 4,
-  },
+  balanceAmount: { fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 30, color: Colors.textPrimary, letterSpacing: -1 },
+  balanceSuffix: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 15, color: Colors.textMuted },
+  creditTrack: { height: 4, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.full, overflow: 'hidden', marginTop: 4 },
   creditFill: { height: '100%', backgroundColor: Colors.primary, borderRadius: BorderRadius.full },
-  // Picker card
   pickerCard: { gap: 14, padding: 16 },
-  sectionTitle: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 13, color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8,
-  },
+  sectionTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 13, color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   amountInputWrap: {
-    flex: 1,
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1, borderColor: Colors.primary + '60',
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: 14, paddingVertical: 10,
-    gap: 6,
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.surfaceElevated, borderWidth: 1, borderColor: Colors.primary + '60',
+    borderRadius: BorderRadius.md, paddingHorizontal: 14, paddingVertical: 10, gap: 6,
   },
-  amountPrefix: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14, color: Colors.textMuted,
-  },
-  amountInput: {
-    flex: 1,
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 22, color: Colors.primary,
-    padding: 0,
-    includeFontPadding: false,
-  },
+  amountPrefix: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: Colors.textMuted },
+  amountInput: { flex: 1, fontFamily: 'PlusJakartaSans_700Bold', fontSize: 22, color: Colors.primary, padding: 0, includeFontPadding: false },
   creditDisplay: { alignItems: 'center', minWidth: 70 },
-  creditDisplayNum: {
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 20, color: Colors.textPrimary, letterSpacing: -0.5,
-  },
-  creditDisplayLabel: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 11, color: Colors.textMuted,
-  },
+  creditDisplayNum: { fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 20, color: Colors.textPrimary, letterSpacing: -0.5 },
+  creditDisplayLabel: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: Colors.textMuted },
   sliderWrap: { gap: 4 },
   slider: { width: '100%', height: 36 },
   sliderLabels: { flexDirection: 'row', justifyContent: 'space-between' },
-  sliderLabel: {
-    fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: Colors.textSubtle,
-  },
+  sliderLabel: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: Colors.textSubtle },
   presetGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  preset: {
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1, borderColor: Colors.glassBorder,
-  },
-  presetActive: {
-    borderColor: Colors.primary + '80',
-    backgroundColor: Colors.primaryLight,
-  },
-  presetText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: Colors.textMuted,
-  },
-  hint: {
-    fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: Colors.textSubtle,
-    textAlign: 'center',
-  },
-  // Fields
-  fieldLabel: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 13, color: Colors.textMuted, marginBottom: 6,
-  },
+  preset: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: BorderRadius.full, backgroundColor: Colors.surfaceElevated, borderWidth: 1, borderColor: Colors.glassBorder },
+  presetActive: { borderColor: Colors.primary + '80', backgroundColor: Colors.primaryLight },
+  presetText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: Colors.textMuted },
+  hint: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: Colors.textSubtle, textAlign: 'center' },
+  fieldLabel: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: Colors.textMuted, marginBottom: 6 },
   fieldInput: {
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1, borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: 14, paddingVertical: 13,
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 15, color: Colors.textPrimary,
+    backgroundColor: Colors.surfaceElevated, borderWidth: 1, borderColor: Colors.border,
+    borderRadius: BorderRadius.md, paddingHorizontal: 14, paddingVertical: 13,
+    fontFamily: 'PlusJakartaSans_400Regular', fontSize: 15, color: Colors.textPrimary,
   },
-  // Summary
   summaryCard: { gap: 8, padding: 16 },
-  summaryTitle: {
-    fontFamily: 'PlusJakartaSans_700Bold', fontSize: 13, color: Colors.textPrimary, marginBottom: 4,
-  },
-  summaryRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 3,
-  },
+  summaryTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 13, color: Colors.textPrimary, marginBottom: 4 },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 3 },
   summaryLabel: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: Colors.textMuted },
   summaryValue: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: Colors.textPrimary },
-  summaryTotal: {
-    borderTopWidth: 1, borderTopColor: Colors.glassBorder, paddingTop: 10, marginTop: 4,
-  },
+  summaryTotal: { borderTopWidth: 1, borderTopColor: Colors.glassBorder, paddingTop: 10, marginTop: 4 },
   summaryTotalLabel: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 15, color: Colors.textPrimary },
   summaryTotalValue: { fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 20, color: Colors.primary },
-  // PayHere badge
-  payhereBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, justifyContent: 'center',
-  },
-  payhereText: {
-    fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: Colors.textSubtle,
-  },
+  payhereBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, justifyContent: 'center' },
+  payhereText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: Colors.textSubtle },
 });
