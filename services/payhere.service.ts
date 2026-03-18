@@ -3,8 +3,10 @@
 
 import { supabase } from './supabase';
 
-export const PAYHERE_MERCHANT_ID = process.env.EXPO_PUBLIC_PAYHERE_MC_ID || '';
-export const PAYHERE_MERCHANT_SECRET = process.env.EXPO_PUBLIC_PAYHERE_MC_SECRET || '';
+// Read from config.ts — set PAYHERE_MC_ID and PAYHERE_MC_SECRET there directly
+import { PAYHERE_MC_ID as CFG_MC_ID, PAYHERE_MC_SECRET as CFG_MC_SECRET } from '@/constants/config';
+export const PAYHERE_MERCHANT_ID = CFG_MC_ID;
+export const PAYHERE_MERCHANT_SECRET = CFG_MC_SECRET;
 export const PAYHERE_SANDBOX = false;
 
 // ─── Credit Rules ──────────────────────────────────────────────────────────
@@ -175,13 +177,10 @@ export async function generatePayHereHash(
   const merchantId = PAYHERE_MERCHANT_ID;
   const merchantSecret = PAYHERE_MERCHANT_SECRET;
 
-  if (!merchantId || !merchantSecret) {
-    // Credentials not set — try the edge function as fallback
-    const { data, error } = await supabase.functions.invoke('payhere-checkout', {
-      body: { action: 'generate_hash', order_id: orderId, amount: amount.toFixed(2), currency },
-    });
-    if (error) throw new Error('PayHere credentials not configured. Please add EXPO_PUBLIC_PAYHERE_MC_ID and EXPO_PUBLIC_PAYHERE_MC_SECRET to your environment.');
-    return data as { hash: string; merchantId: string };
+  if (!merchantId || merchantId === 'YOUR_MERCHANT_ID' || !merchantSecret || merchantSecret === 'YOUR_MERCHANT_SECRET') {
+    throw new Error(
+      'PayHere credentials not set. Open constants/config.ts and replace YOUR_MERCHANT_ID and YOUR_MERCHANT_SECRET with your actual PayHere credentials from the PayHere merchant dashboard.'
+    );
   }
 
   const hash = generatePayHereHashLocal(merchantId, merchantSecret, orderId, amount.toFixed(2), currency);

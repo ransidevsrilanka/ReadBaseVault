@@ -1,5 +1,5 @@
 // Powered by OnSpace.AI
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Platform,
   Dimensions,
   Pressable,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -27,6 +28,15 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const heroScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.timing(heroScale, {
+      toValue: 1.12,
+      duration: 9000,
+      useNativeDriver: true,
+    }).start();
+  }, []);
   const { signIn, isSessionConflict, signOut } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -57,13 +67,15 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.root}>
-      {/* Background Hero */}
-      <Image
-        source={{ uri: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=800&q=80' }}
-        style={styles.heroImage}
-        contentFit="cover"
-        transition={300}
-      />
+      {/* Background Hero with zoom animation */}
+      <Animated.View style={[styles.heroImage, { transform: [{ scale: heroScale }] }]}>
+        <Image
+          source={{ uri: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=800&q=80' }}
+          style={{ width: '100%', height: '100%' }}
+          contentFit="cover"
+          transition={300}
+        />
+      </Animated.View>
       <LinearGradient
         colors={['transparent', Colors.background + 'dd', Colors.background]}
         style={styles.heroGradient}

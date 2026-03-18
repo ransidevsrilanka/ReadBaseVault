@@ -17,11 +17,11 @@ export const AI_CREDIT_LIMITS: Record<string, number> = {
 
 export const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-// PayHere — set these in your .env file:
-// EXPO_PUBLIC_PAYHERE_MC_ID=<your merchant ID>
-// EXPO_PUBLIC_PAYHERE_MC_SECRET=<your merchant secret>
-export const PAYHERE_MC_ID = process.env.EXPO_PUBLIC_PAYHERE_MC_ID || '';
-export const PAYHERE_MC_SECRET = process.env.EXPO_PUBLIC_PAYHERE_MC_SECRET || '';
+// PayHere credentials — paste your values directly here.
+// OnSpace Cloud Secrets are server-side only; Expo client cannot read them.
+// Merchant ID is public. Merchant Secret is used only for hash generation.
+export const PAYHERE_MC_ID = process.env.EXPO_PUBLIC_PAYHERE_MC_ID || 'YOUR_MERCHANT_ID';
+export const PAYHERE_MC_SECRET = process.env.EXPO_PUBLIC_PAYHERE_MC_SECRET || 'YOUR_MERCHANT_SECRET';
 export const SESSION_TIMEOUT_MINUTES = 30;
 export const OFFLINE_PURGE_DAYS = 7;
 export const MAX_CACHE_MB = 500;
