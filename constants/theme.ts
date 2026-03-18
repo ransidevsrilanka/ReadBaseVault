@@ -18,7 +18,7 @@ export const Colors = {
   primaryLight: 'rgba(29, 161, 242, 0.18)',
   primaryGlow: 'rgba(29, 161, 242, 0.10)',
 
-  gold: 'hsl(45, 93%, 47%)',                  // Gold — premium/platinum
+  gold: '#f5c518',                             // Gold — premium/platinum (was hsl(45,93%,47%))
   goldLight: 'rgba(245, 197, 24, 0.15)',
   goldGlow: 'rgba(245, 197, 24, 0.08)',
 
@@ -27,11 +27,11 @@ export const Colors = {
 
   // Tier Colors
   tierSilver: '#a1a1aa',
-  tierGold: 'hsl(45, 93%, 47%)',
+  tierGold: '#f5c518',
   tierPlatinum: '#e5e4e2',
 
   // Semantic
-  success: 'hsl(142, 76%, 36%)',
+  success: '#16a34a',
   successLight: 'rgba(22, 163, 74, 0.15)',
   error: '#ef4444',
   errorLight: 'rgba(239, 68, 68, 0.15)',
@@ -114,7 +114,7 @@ export const Shadows = {
     elevation: 10,
   },
   gold: {
-    shadowColor: 'hsl(45, 93%, 47%)',
+    shadowColor: '#f5c518',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 20,
